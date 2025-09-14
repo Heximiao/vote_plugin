@@ -1,0 +1,41 @@
+{
+  "manifest_version": 1,
+  "name": "vote_plugin",
+  "display_name": "群聊投票插件",
+  "version": "1.1.2",
+  "description": "一个通用的群聊投票插件。支持发起投票、成员参与投票、并自动统计结果。",
+  "author": {
+    "name": "何夕",
+    "url": "https://github.com/Heximiao/vote_plugin",
+    "email": "lcy1416603026@gmail.com"
+  },
+  "license": "MIT",
+  "host_application": {
+    "min_version": "0.9.0",
+    "max_version": "0.10.2"
+  },
+  "entry": "plugin.py",
+  "homepage_url": "https://github.com/Heximiao/vote_plugin",
+  "repository_url": "https://github.com/Heximiao/vote_plugin",
+  "keywords": ["vote", "poll", "group", "utility", "投票", "问卷", "群聊", "工具"],
+  "categories": ["Utility", "Group"],
+  "default_locale": "zh-CN",
+  "locales_path": "_locales",
+  "plugin_info": {
+    "is_built_in": false,
+    "plugin_type": "chat",
+    "components": [
+      {
+        "type": "command",
+        "name": "vote",
+        "description": "发起一个群聊投票。"
+      },
+      {
+        "type": "command",
+        "name": "vote_help",
+        "description": "显示投票命令的使用说明。"
+      }
+    ],
+    "features": ["发起投票", "统计投票结果", "群聊互动"]
+  }
+}
