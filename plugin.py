@@ -141,11 +141,11 @@ def _resolve_ctx_from_message_any(msg: Any) -> tuple[Optional[str], Optional[str
     return group_id, sender_qq, _safe_str(group_name), _safe_str(sender_name)
 
 # ================= 核心工具函数（调用 Napcat HTTP API） =================
-async def send_group_text_via_napcat(group_id: str, text: str) -> Optional[int]:
+async def send_group_text_via_napcat(group_id: str, text: str, port: int) -> Optional[int]:
     """
     发送群消息，返回 message_id
     """
-    url = "127.0.0.1:9998"
+    url = f"127.0.0.1:{port}"
     payload = {
         "group_id": int(group_id),
         "message": [{"type": "text", "data": {"text": text}}]
@@ -162,11 +162,12 @@ async def send_group_text_via_napcat(group_id: str, text: str) -> Optional[int]:
         logger.error(f"发送群消息失败: {e}")
         return None
 
-async def fetch_emoji_votes(message_id: int, emoji: str, emoji_type: str = "1") -> int:
+# **已修改**：将 port 参数移到 emoji_type 前面
+async def fetch_emoji_votes(message_id: int, emoji: str, port: int, emoji_type: str = "1") -> int:
     """
     查询指定消息贴表情数量
     """
-    url = "127.0.0.1:9998"
+    url = f"127.0.0.1:{port}"
     payload = {
         "message_id": int(message_id),
         "emojiId": emoji,
@@ -186,11 +187,11 @@ async def fetch_emoji_votes(message_id: int, emoji: str, emoji_type: str = "1") 
         logger.error(f"查询表情 {emoji} 失败: {e}")
         return 0
 
-async def set_group_ban_via_napcat(group_id: str, user_id: str, minutes: int):
+async def set_group_ban_via_napcat(group_id: str, user_id: str, minutes: int, port: int):
     """
     调用 Napcat HTTP 接口对指定用户进行禁言
     """
-    url = "127.0.0.1:9998"
+    url = f"127.0.0.1:{port}"
     payload = {
         "group_id": int(group_id),
         "user_id": int(user_id),
@@ -239,6 +240,9 @@ class VoteBanCommand(BaseCommand):
         "vote_ban": {
             "default_minutes": 1,
             "vote_duration": 60,
+        },
+        "plugin": {
+            "napcat_port": 9998
         }
     }
 
@@ -306,10 +310,11 @@ class VoteBanCommand(BaseCommand):
             return False, "target_id_not_found", True
 
         vote_duration = config_data["vote_ban"]["vote_duration"]
+        napcat_port = config_data.get("plugin", {}).get("napcat_port", 9998)
         # 更新投票信息中的表情
         text = f"📢 群投票禁言发起\n目标用户: @{target_str}\n禁言时长: {minutes} 分钟\n投票方式: [按钮] 同意 / [❓] 反对\n投票时间: {vote_duration} 秒"
 
-        message_id = await send_group_text_via_napcat(group_id, text)
+        message_id = await send_group_text_via_napcat(group_id, text, napcat_port)
         if message_id:
             # 存储投票信息时，使用返回的 message_id 作为键
             vote_summaries[str(message_id)] = {
@@ -333,8 +338,9 @@ class VoteBanCommand(BaseCommand):
         else:
             config_data = self.DEFAULT_CONFIG
 
-        # 从配置中获取 debug_mode
+        # 从配置中获取 debug_mode 和 napcat_port
         debug_mode = config_data.get("plugin", {}).get("debug_mode", False)
+        napcat_port = config_data.get("plugin", {}).get("napcat_port", 9998)
             
         vote_duration = config_data["vote_ban"]["vote_duration"]
         logger.info(f"等待 {vote_duration} 秒后结束投票。")
@@ -357,7 +363,7 @@ class VoteBanCommand(BaseCommand):
 
         # 第一次请求：查询“✅”表情的票数
         try:
-            url = "127.0.0.1:9998"
+            url = f"127.0.0.1:{napcat_port}"
             payload_yes = {
                 "message_id": int(message_id),
                 "emojiId": EMOJI_YES_ID,
@@ -372,7 +378,8 @@ class VoteBanCommand(BaseCommand):
                     data = await resp.json()
                     logger.info(f"Napcat返回的'同意'票数据: {json.dumps(data, ensure_ascii=False, indent=2)}")
                     if data.get('retcode') == 0:
-                        yes_count = len(data.get("data", {}).get("emojiLikesList", []))
+                        # **已修改**：调用 fetch_emoji_votes 时调整参数顺序
+                        yes_count = await fetch_emoji_votes(int(message_id), EMOJI_YES_ID, napcat_port, "1")
                     else:
                         logger.warning(f"获取同意票失败，Napcat返回错误码: {data.get('retcode')}")
         except Exception as e:
@@ -380,7 +387,7 @@ class VoteBanCommand(BaseCommand):
             
         # 第二次请求：查询“❓”表情的票数
         try:
-            url = "127.0.0.1:9998"
+            url = f"127.0.0.1:{napcat_port}"
             payload_no = {
                 "message_id": int(message_id),
                 "emojiId": EMOJI_NO_ID,
@@ -395,7 +402,8 @@ class VoteBanCommand(BaseCommand):
                     data = await resp.json()
                     logger.info(f"Napcat返回的'反对'票数据: {json.dumps(data, ensure_ascii=False, indent=2)}")
                     if data.get('retcode') == 0:
-                        no_count = len(data.get("data", {}).get("emojiLikesList", []))
+                        # **已修改**：调用 fetch_emoji_votes 时调整参数顺序
+                        no_count = await fetch_emoji_votes(int(message_id), EMOJI_NO_ID, napcat_port, EMOJI_NO_TYPE)
                     else:
                         logger.warning(f"获取反对票失败，Napcat返回错误码: {data.get('retcode')}")
         except Exception as e:
@@ -412,11 +420,11 @@ class VoteBanCommand(BaseCommand):
 
         if yes_count > no_count:
             result_text += f"投票通过！该用户将被禁言 {vote_info['minutes']} 分钟。"
-            await set_group_ban_via_napcat(vote_info['group_id'], vote_info['target_user_id'], vote_info['minutes'])
+            await set_group_ban_via_napcat(vote_info['group_id'], vote_info['target_user_id'], vote_info['minutes'], napcat_port)
         else:
             result_text += f"投票未通过，该用户保留自由。"
 
-        await send_group_text_via_napcat(vote_info['group_id'], result_text)
+        await send_group_text_via_napcat(vote_info['group_id'], result_text, napcat_port)
         vote_summaries.pop(message_id, None)
 
 # ================= 插件注册 =================
@@ -439,6 +447,7 @@ class VoteBanPlugin(BasePlugin):
             "version": ConfigField(type=str, default="1.1.2", description="插件版本"),
             "enabled": ConfigField(type=bool, default=True, description="是否启用插件"),
             "debug_mode": ConfigField(type=bool, default=False, description="是否启用调试模式，开启后会打印更多日志"),
+            "napcat_port": ConfigField(type=int, default=9998, description="Napcat HTTP API端口号"),
         },
         "vote_ban": {
             "default_minutes": ConfigField(type=int, default=1, description="默认禁言时长（分钟）"),
