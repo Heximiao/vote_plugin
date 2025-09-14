@@ -3,7 +3,7 @@
   "name": "vote_plugin",
   "display_name": "群聊投票插件",
   "version": "1.1.2",
-  "description": "一个通用的群聊投票插件。支持发起投票、成员参与投票、并自动统计结果。",
+  "description": "一个通用的群聊投票插件（目前只有投票禁言）。支持发起投票、成员参与投票、并自动统计结果。",
   "author": {
     "name": "何夕",
     "url": "https://github.com/Heximiao/vote_plugin",
